@@ -677,17 +677,16 @@ function ScoreEntry({ onSave, entries }) {
   return (
     <div style={s.card}>
       <div style={s.cardTitle}>Enter / Edit Daily Scores</div>
-      <div style={{display:"flex",gap:8,marginBottom:16}}>
-        <div style={{flex:3}}>
-          <label style={{fontSize:10,color:"var(--text2)",display:"block",marginBottom:4}}>Date</label>
-          <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={s.input}/>
-        </div>
-        <div style={{flex:2}}>
-          <label style={{fontSize:10,color:"var(--text2)",display:"block",marginBottom:4}}>Day / Picker</label>
-          <div style={{...s.input,background:"var(--card2)",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
-            <span style={{fontSize:12}}>{dayOfWeek.slice(0,3)}</span>
-            <span style={{color:"var(--green)",fontWeight:700,fontSize:12}}>{picker}</span>
-          </div>
+      <div style={{marginBottom:16}}>
+        <label style={{fontSize:10,color:"var(--text2)",display:"block",marginBottom:4}}>Date</label>
+        <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={s.input}/>
+      </div>
+      <div style={{marginBottom:16}}>
+        <label style={{fontSize:10,color:"var(--text2)",display:"block",marginBottom:4}}>Day / Picker</label>
+        <div style={{...s.input,background:"var(--card2)",display:"inline-flex",alignItems:"center",gap:6,width:"auto"}}>
+          <span style={{fontSize:13,fontWeight:600}}>{dayOfWeek}</span>
+          <span style={{color:"var(--text2)"}}>·</span>
+          <span style={{color:"var(--green)",fontWeight:700,fontSize:13}}>{picker}</span>
         </div>
       </div>
       <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
