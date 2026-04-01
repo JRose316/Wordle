@@ -623,19 +623,20 @@ function ScoreEntry({ onSave, entries }) {
     
     const payload = {
       date,
-      firstWord: firstWord.toUpperCase(),
-      answer: answer.toUpperCase(),
-      greens: fwGreens,
-      yellows: fwYellows,
+      firstWord: firstWord.toUpperCase() || "",
+      answer: answer.toUpperCase() || "",
+      greens: firstWord ? fwGreens : "",
+      yellows: firstWord ? fwYellows : "",
       guesses: {}
     };
     
-    // Convert guesses for the script
+    // Only send guesses that have actual values — empty ones are skipped
+    // so they don't overwrite existing data in the sheet
     PLAYERS.forEach(p => {
       const g = guesses[p];
       if (g === null || g === undefined) payload.guesses[p] = "";
       else if (g === "-") payload.guesses[p] = "X";
-      else payload.guesses[p] = g;
+      else payload.guesses[p] = String(g);
     });
     
     try {
@@ -646,6 +647,7 @@ function ScoreEntry({ onSave, entries }) {
       const result = await res.json();
       
       if (result.success) {
+        const updatedCount = result.updated ? result.updated.length : 0;
         // Also update local state so dashboard reflects immediately
         const fwGrays = 5 - fwGreens - fwYellows;
         const entry = {
@@ -655,6 +657,7 @@ function ScoreEntry({ onSave, entries }) {
         };
         onSave(entry);
         setSaveState("saved");
+        setErrorMsg(updatedCount > 0 ? `Saved ${updatedCount} score${updatedCount===1?"":"s"} to Google Sheets!` : "Saved to Google Sheets!");
         setTimeout(() => setSaveState("idle"), 3000);
       } else {
         setSaveState("error");
@@ -731,7 +734,7 @@ function ScoreEntry({ onSave, entries }) {
         <button onClick={handleSave} disabled={saveState==="saving"} style={{...s.btn,opacity:saveState==="saving"?0.6:1,cursor:saveState==="saving"?"wait":"pointer"}}>
           {saveState==="saving" ? "Saving to Google Sheets..." : existing ? "Update Scores" : "Save Scores"}
         </button>
-        {saveState==="saved" && <span style={{color:"var(--green)",fontSize:12,fontWeight:700}}>Saved to Google Sheets!</span>}
+        {saveState==="saved" && <span style={{color:"var(--green)",fontSize:12,fontWeight:700}}>{errorMsg}</span>}
         {saveState==="error" && <span style={{color:"#ff4444",fontSize:11,fontWeight:600}}>{errorMsg}</span>}
       </div>
     </div>
