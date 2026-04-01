@@ -39,19 +39,53 @@ function parseCSV(text) {
   if (lines.length < 2) return {};
   const result = { Q1:[], Q2:[], Q3:[], Q4:[] };
   
+  function parseDate(raw) {
+    if (!raw) return null;
+    raw = raw.replace(/^"|"$/g, '').trim();
+    // Already YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    // Google Sheets serial number (just digits, typically 40000-50000 range for 2010s-2030s)
+    if (/^\d{4,5}$/.test(raw)) {
+      const serial = parseInt(raw);
+      const d = new Date(1899, 11, 30 + serial);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+    // M/D/YYYY or MM/DD/YYYY
+    const slashMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (slashMatch) {
+      return `${slashMatch[3]}-${slashMatch[1].padStart(2,'0')}-${slashMatch[2].padStart(2,'0')}`;
+    }
+    // M/D/YY or MM/DD/YY (2-digit year, assume 2000s)
+    const shortYearMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
+    if (shortYearMatch) {
+      const yr = 2000 + parseInt(shortYearMatch[3]);
+      return `${yr}-${shortYearMatch[1].padStart(2,'0')}-${shortYearMatch[2].padStart(2,'0')}`;
+    }
+    // "Mon D" or "Mon DD" (no year — assume 2026 since this is a 2026 sheet)
+    const monthDay = raw.match(/^([A-Za-z]{3,9})\s+(\d{1,2})$/);
+    if (monthDay) {
+      const months = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+      const m = months[monthDay[1].toLowerCase().slice(0,3)];
+      if (m) return `2026-${String(m).padStart(2,'0')}-${monthDay[2].padStart(2,'0')}`;
+    }
+    // Fallback: try native Date parsing but force year to 2026 if it comes back wrong
+    try {
+      const d = new Date(raw);
+      if (!isNaN(d)) {
+        const yr = d.getFullYear();
+        const finalYr = (yr < 2025 || yr > 2030) ? 2026 : yr;
+        return `${finalYr}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      }
+    } catch {}
+    return null;
+  }
+  
   for (let i = 1; i < lines.length; i++) {
     const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
     if (cols.length < 17) continue;
     
-    // Parse date - handle various Google Sheets formats
-    let dateStr = cols[0];
-    try {
-      const d = new Date(dateStr);
-      if (!isNaN(d)) {
-        dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-      }
-    } catch {}
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
+    const dateStr = parseDate(cols[0]);
+    if (!dateStr) continue;
     
     const quarter = cols[1] || getQuarterForDate(dateStr);
     const day = cols[2];
@@ -178,7 +212,18 @@ function computeStats(entries) {
     name: p, points: stats[p].points, games: stats[p].games,
     avg: stats[p].games ? (stats[p].totalGuesses / stats[p].games) : 0,
     dist: stats[p].dist, lastGenius: stats[p].lastGenius
-  })).sort((a,b) => b.points - a.points);
+  })).sort((a,b) => {
+    // Primary: higher points wins
+    if (b.points !== a.points) return b.points - a.points;
+    // Tiebreaker 1: lower average score (fewer guesses) wins
+    if (a.avg !== b.avg) return a.avg - b.avg;
+    // Tiebreaker 2: more genius scores (3 or better) wins
+    const aGenius = (a.dist[1]||0)+(a.dist[2]||0)+(a.dist[3]||0);
+    const bGenius = (b.dist[1]||0)+(b.dist[2]||0)+(b.dist[3]||0);
+    if (bGenius !== aGenius) return bGenius - aGenius;
+    // Tiebreaker 3: more games played wins
+    return b.games - a.games;
+  });
 
   // Day of week averages — count X/-/DNP as 7 so they raise the average
   const dowStats = {};
@@ -260,6 +305,8 @@ function Leaderboard({ board, totalDays, quarter }) {
         const barPct = maxPts > 0 ? (p.points / maxPts) * 100 : 0;
         const gamesBack = i > 0 ? board[0].points - p.points : 0;
         const geniusDays = p.lastGenius ? Math.floor((new Date() - new Date(p.lastGenius+"T12:00:00"))/(1000*60*60*24)) : 999;
+        const tiedWithPrev = i > 0 && board[i-1].points === p.points;
+        const tiedWithNext = i < board.length-1 && board[i+1]?.points === p.points;
         
         return (
           <div key={p.name} style={{
@@ -277,7 +324,8 @@ function Leaderboard({ board, totalDays, quarter }) {
               <div style={{flex:1,minWidth:0}}>
                 <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:3}}>
                   <span style={{fontWeight:700,fontSize:isPodium?16:14,color:"var(--white)"}}>{p.name}</span>
-                  {gamesBack > 0 && <span style={{fontSize:10,color:"var(--text2)",fontFamily:"'DM Mono',monospace"}}>-{gamesBack}</span>}
+                  {gamesBack > 0 && !tiedWithPrev && <span style={{fontSize:10,color:"var(--text2)",fontFamily:"'DM Mono',monospace"}}>-{gamesBack}</span>}
+                  {tiedWithPrev && <span style={{fontSize:9,color:"var(--yellow)",fontFamily:"'DM Mono',monospace"}}>Tied · avg {p.avg.toFixed(2)}</span>}
                 </div>
                 <div style={{height:5,borderRadius:3,background:"rgba(255,255,255,.06)",overflow:"hidden"}}>
                   <div style={{height:"100%",borderRadius:3,background:barColors[i]||"var(--green)",width:`${barPct}%`,transition:"width .6s ease"}}/>
