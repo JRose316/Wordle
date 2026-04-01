@@ -33,6 +33,7 @@ function getQuarterForDate(d) {
 
 // ─── GOOGLE SHEETS DATA SOURCE ──────────────────────────────
 const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQXxb8AJj2b9HzJPVd6njrCRlA411Xan7P59wxrdmlHeR2cGv0Q8kwpZOLp3meBxQJ7Qz7_tH9yFLvu/pub?gid=824587220&single=true&output=csv";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwBFHa2Bh6A22nOkZ5BBZXne4koRrDzUX8E7meObv5vGk9ZutuIbPvAKhJ0WP-0VVwpEw/exec";
 
 function parseCSV(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l);
@@ -596,7 +597,8 @@ function ScoreEntry({ onSave, entries }) {
   const [fwGreens, setFwGreens] = useState(0);
   const [fwYellows, setFwYellows] = useState(0);
   const [guesses, setGuesses] = useState({});
-  const [saved, setSaved] = useState(false);
+  const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
+  const [errorMsg, setErrorMsg] = useState("");
 
   const dayOfWeek = getDayOfWeek(date);
   const picker = DAY_ASSIGN[dayOfWeek] || "—";
@@ -612,19 +614,56 @@ function ScoreEntry({ onSave, entries }) {
     } else {
       setAnswer(""); setFirstWord(""); setFwGreens(0); setFwYellows(0); setGuesses({});
     }
-    setSaved(false);
+    setSaveState("idle");
   }, [date]);
 
-  const handleSave = () => {
-    const fwGrays = 5 - fwGreens - fwYellows;
-    const entry = {
-      date, day: dayOfWeek, picker, firstWord: firstWord.toUpperCase(), answer: answer.toUpperCase(),
-      guesses,
-      fw: { greens: fwGreens, yellows: fwYellows, grays: Math.max(0, fwGrays), score: fwGreens*2 + fwYellows }
+  const handleSave = async () => {
+    setSaveState("saving");
+    setErrorMsg("");
+    
+    const payload = {
+      date,
+      firstWord: firstWord.toUpperCase(),
+      answer: answer.toUpperCase(),
+      greens: fwGreens,
+      yellows: fwYellows,
+      guesses: {}
     };
-    onSave(entry);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    
+    // Convert guesses for the script
+    PLAYERS.forEach(p => {
+      const g = guesses[p];
+      if (g === null || g === undefined) payload.guesses[p] = "";
+      else if (g === "-") payload.guesses[p] = "X";
+      else payload.guesses[p] = g;
+    });
+    
+    try {
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      const result = await res.json();
+      
+      if (result.success) {
+        // Also update local state so dashboard reflects immediately
+        const fwGrays = 5 - fwGreens - fwYellows;
+        const entry = {
+          date, day: dayOfWeek, picker, firstWord: firstWord.toUpperCase(), answer: answer.toUpperCase(),
+          guesses,
+          fw: { greens: fwGreens, yellows: fwYellows, grays: Math.max(0, fwGrays), score: fwGreens*2 + fwYellows }
+        };
+        onSave(entry);
+        setSaveState("saved");
+        setTimeout(() => setSaveState("idle"), 3000);
+      } else {
+        setSaveState("error");
+        setErrorMsg(result.error || "Unknown error");
+      }
+    } catch (err) {
+      setSaveState("error");
+      setErrorMsg("Failed to connect to Google Sheets. Check your connection and try again.");
+    }
   };
 
   const setGuess = (p, val) => {
@@ -688,9 +727,12 @@ function ScoreEntry({ onSave, entries }) {
           ))}
         </div>
       </div>
-      <div style={{display:"flex",gap:8,alignItems:"center"}}>
-        <button onClick={handleSave} style={s.btn}>{existing?"Update":"Save"} Scores</button>
-        {saved && <span style={{color:"var(--green)",fontSize:12,fontWeight:700}}>Saved!</span>}
+      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+        <button onClick={handleSave} disabled={saveState==="saving"} style={{...s.btn,opacity:saveState==="saving"?0.6:1,cursor:saveState==="saving"?"wait":"pointer"}}>
+          {saveState==="saving" ? "Saving to Google Sheets..." : existing ? "Update Scores" : "Save Scores"}
+        </button>
+        {saveState==="saved" && <span style={{color:"var(--green)",fontSize:12,fontWeight:700}}>Saved to Google Sheets!</span>}
+        {saveState==="error" && <span style={{color:"#ff4444",fontSize:11,fontWeight:600}}>{errorMsg}</span>}
       </div>
     </div>
   );
