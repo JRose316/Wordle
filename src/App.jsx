@@ -172,7 +172,7 @@ const s = {
 };
 
 // ─── COMPUTE STATS ───────────────────────────────────────────
-function computeStats(entries) {
+function computeStats(entries, quarter) {
   const stats = {};
   PLAYERS.forEach(p => { stats[p] = { points:0, games:0, totalGuesses:0, dist:{1:0,2:0,3:0,4:0,5:0,6:0,"-":0,"DNP":0}, fwScore:0, lastGenius:null, weeklyPts:[] }; });
   
@@ -214,16 +214,16 @@ function computeStats(entries) {
     avg: stats[p].games ? (stats[p].totalGuesses / stats[p].games) : 0,
     dist: stats[p].dist, lastGenius: stats[p].lastGenius
   })).sort((a,b) => {
-    // Primary: higher points wins
     if (b.points !== a.points) return b.points - a.points;
-    // Tiebreaker 1: lower average score (fewer guesses) wins
-    if (a.avg !== b.avg) return a.avg - b.avg;
-    // Tiebreaker 2: more genius scores (3 or better) wins
-    const aGenius = (a.dist[1]||0)+(a.dist[2]||0)+(a.dist[3]||0);
-    const bGenius = (b.dist[1]||0)+(b.dist[2]||0)+(b.dist[3]||0);
-    if (bGenius !== aGenius) return bGenius - aGenius;
-    // Tiebreaker 3: more games played wins
-    return b.games - a.games;
+    // Q1 uses tiebreakers; Q2+ allows true ties
+    if (quarter === "Q1") {
+      if (a.avg !== b.avg) return a.avg - b.avg;
+      const aG = (a.dist[1]||0)+(a.dist[2]||0)+(a.dist[3]||0);
+      const bG = (b.dist[1]||0)+(b.dist[2]||0)+(b.dist[3]||0);
+      if (bG !== aG) return bG - aG;
+      return b.games - a.games;
+    }
+    return 0;
   });
 
   // Day of week averages — count X/-/DNP as 7 so they raise the average
@@ -300,19 +300,27 @@ function Leaderboard({ board, totalDays, quarter }) {
         </div>
       </div>
       {board.map((p,i) => {
-        const isPodium = i < 3;
+        // Calculate display rank with true ties
+        let displayRank = 1;
+        for (let r = 0; r < i; r++) {
+          if (board[r].points !== p.points) displayRank = r + 1;
+        }
+        if (i > 0 && board[i-1].points !== p.points) displayRank = i + 1;
+        if (i === 0) displayRank = 1;
+        
+        const isPodium = displayRank <= 3;
+        const podiumIdx = displayRank - 1; // 0,1,2 for trophy/color lookup
         const geniusCount = (p.dist[1]||0) + (p.dist[2]||0) + (p.dist[3]||0);
         const missCount = (p.dist["-"]||0) + (p.dist["DNP"]||0);
         const barPct = maxPts > 0 ? (p.points / maxPts) * 100 : 0;
-        const gamesBack = i > 0 ? board[0].points - p.points : 0;
+        const gamesBack = board[0].points - p.points;
         const geniusDays = p.lastGenius ? Math.floor((new Date() - new Date(p.lastGenius+"T12:00:00"))/(1000*60*60*24)) : 999;
-        const tiedWithPrev = i > 0 && board[i-1].points === p.points;
-        const tiedWithNext = i < board.length-1 && board[i+1]?.points === p.points;
+        const isTied = (i > 0 && board[i-1].points === p.points) || (i < board.length-1 && board[i+1]?.points === p.points);
         
         return (
           <div key={p.name} style={{
-            background: isPodium ? podiumColors[i] : "transparent",
-            border: isPodium ? `1px solid ${podiumBorders[i]}` : "1px solid transparent",
+            background: isPodium ? podiumColors[Math.min(podiumIdx,2)] : "transparent",
+            border: isPodium ? `1px solid ${podiumBorders[Math.min(podiumIdx,2)]}` : "1px solid transparent",
             borderRadius: 10,
             padding: "10px 12px",
             marginBottom: 6,
@@ -320,22 +328,22 @@ function Leaderboard({ board, totalDays, quarter }) {
           }}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <div style={{fontSize:isPodium?24:16,width:32,textAlign:"center",flexShrink:0}}>
-                {isPodium ? trophies[i] : <span style={{fontFamily:"'DM Mono',monospace",fontWeight:800,color:"var(--text2)"}}>{i+1}</span>}
+                {isPodium ? trophies[Math.min(podiumIdx,2)] : <span style={{fontFamily:"'DM Mono',monospace",fontWeight:800,color:"var(--text2)"}}>{displayRank}</span>}
               </div>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:3}}>
                   <span style={{fontWeight:700,fontSize:isPodium?16:14,color:"var(--white)"}}>{p.name}</span>
-                  {gamesBack > 0 && !tiedWithPrev && <span style={{fontSize:10,color:"var(--text2)",fontFamily:"'DM Mono',monospace"}}>-{gamesBack}</span>}
-                  {tiedWithPrev && <span style={{fontSize:9,color:"var(--yellow)",fontFamily:"'DM Mono',monospace"}}>Tied · avg {p.avg.toFixed(2)}</span>}
+                  {isTied && <span style={{fontSize:9,color:"var(--yellow)",fontFamily:"'DM Mono',monospace",fontWeight:600}}>TIED</span>}
                 </div>
                 <div style={{height:5,borderRadius:3,background:"rgba(255,255,255,.06)",overflow:"hidden"}}>
-                  <div style={{height:"100%",borderRadius:3,background:barColors[i]||"var(--green)",width:`${barPct}%`,transition:"width .6s ease"}}/>
+                  <div style={{height:"100%",borderRadius:3,background:barColors[Math.min(isPodium?podiumIdx:i,6)]||"var(--green)",width:`${barPct}%`,transition:"width .6s ease"}}/>
                 </div>
                 <div style={{display:"flex",gap:10,marginTop:5,flexWrap:"wrap"}}>
                   <span style={{fontSize:10,color:"var(--text2)"}}>Avg <span style={{color:"var(--white)",fontFamily:"'DM Mono',monospace",fontWeight:600}}>{p.avg.toFixed(2)}</span></span>
                   <span style={{fontSize:10,color:"var(--text2)"}}>Genius <span style={{color:"var(--green)",fontFamily:"'DM Mono',monospace",fontWeight:600}}>{geniusCount}</span></span>
                   <span style={{fontSize:10,color:"var(--text2)"}}>Games <span style={{color:"var(--white)",fontFamily:"'DM Mono',monospace",fontWeight:600}}>{p.games}</span></span>
                   {missCount > 0 && <span style={{fontSize:10,color:"var(--text2)"}}>Missed <span style={{color:"#ff4444",fontFamily:"'DM Mono',monospace",fontWeight:600}}>{missCount}</span></span>}
+                  {gamesBack > 0 && <span style={{fontSize:10,color:"var(--text2)"}}>Behind Leader <span style={{color:"var(--yellow)",fontFamily:"'DM Mono',monospace",fontWeight:600}}>-{gamesBack}</span></span>}
                   <span style={{fontSize:10,color:"var(--text2)"}}>Last Genius <span style={{color:geniusDays<=3?"var(--green)":geniusDays<=7?"var(--yellow)":"#ff4444",fontFamily:"'DM Mono',monospace",fontWeight:600}}>{geniusDays===0?"Today":geniusDays===999?"Never":`${geniusDays}d ago`}</span></span>
                 </div>
               </div>
@@ -810,7 +818,7 @@ function FullHistory({ entries }) {
 
 // ─── MAIN APP ────────────────────────────────────────────────
 export default function App() {
-  const [quarter, setQuarter] = useState("Q1");
+  const [quarter, setQuarter] = useState(() => { const m = new Date().getMonth(); return m < 3 ? "Q1" : m < 6 ? "Q2" : m < 9 ? "Q3" : "Q4"; });
   const [tab, setTab] = useState("dashboard");
   const [allData, setAllData] = useState({ Q1:[], Q2:[], Q3:[], Q4:[] });
   const [loaded, setLoaded] = useState(false);
@@ -850,7 +858,7 @@ export default function App() {
   }, []);
 
   const entries = allData[quarter] || [];
-  const computed = computeStats(entries);
+  const computed = computeStats(entries, quarter);
 
   const tabs = [
     { id:"dashboard", label:"Dashboard" },
