@@ -300,22 +300,25 @@ function Leaderboard({ board, totalDays, quarter }) {
         </div>
       </div>
       {board.map((p,i) => {
-        // Calculate display rank with true ties
-        let displayRank = 1;
-        for (let r = 0; r < i; r++) {
-          if (board[r].points !== p.points) displayRank = r + 1;
+        // For Q1: no ties (tiebreakers handle it), rank = position
+        // For Q2+: same points = same rank
+        let displayRank = i + 1;
+        const allowTies = quarter !== "Q1";
+        if (allowTies && i > 0) {
+          // Walk backwards to find the first person with this same score
+          let r = i;
+          while (r > 0 && board[r-1].points === p.points) r--;
+          displayRank = r + 1;
         }
-        if (i > 0 && board[i-1].points !== p.points) displayRank = i + 1;
-        if (i === 0) displayRank = 1;
         
         const isPodium = displayRank <= 3;
-        const podiumIdx = displayRank - 1; // 0,1,2 for trophy/color lookup
+        const podiumIdx = displayRank - 1;
         const geniusCount = (p.dist[1]||0) + (p.dist[2]||0) + (p.dist[3]||0);
         const missCount = (p.dist["-"]||0) + (p.dist["DNP"]||0);
         const barPct = maxPts > 0 ? (p.points / maxPts) * 100 : 0;
         const gamesBack = board[0].points - p.points;
         const geniusDays = p.lastGenius ? Math.floor((new Date() - new Date(p.lastGenius+"T12:00:00"))/(1000*60*60*24)) : 999;
-        const isTied = (i > 0 && board[i-1].points === p.points) || (i < board.length-1 && board[i+1]?.points === p.points);
+        const isTied = allowTies && ((i > 0 && board[i-1].points === p.points) || (i < board.length-1 && board[i+1]?.points === p.points));
         
         return (
           <div key={p.name} style={{
