@@ -319,7 +319,7 @@ function Leaderboard({ board, totalDays, quarter }) {
         const missCount = (p.dist["-"]||0) + (p.dist["DNP"]||0);
         const barPct = maxPts > 0 ? (p.points / maxPts) * 100 : 0;
         const gamesBack = board[0].points - p.points;
-        const geniusDays = p.lastGenius ? Math.floor((new Date() - new Date(p.lastGenius+"T12:00:00"))/(1000*60*60*24)) : 999;
+        const geniusDays = p.lastGenius ? (() => { const t = new Date(); const g = new Date(p.lastGenius+"T12:00:00"); const td = new Date(t.getFullYear(),t.getMonth(),t.getDate()); const gd = new Date(g.getFullYear(),g.getMonth(),g.getDate()); return Math.round((td-gd)/(1000*60*60*24)); })() : 999;
         const isTied = allowTies && ((i > 0 && board[i-1].points === p.points) || (i < board.length-1 && board[i+1]?.points === p.points));
         
         return (
@@ -349,6 +349,8 @@ function Leaderboard({ board, totalDays, quarter }) {
                   <span style={{fontSize:10,color:"var(--text2)"}}>Games <span style={{color:"var(--white)",fontFamily:"'DM Mono',monospace",fontWeight:600}}>{p.games}</span></span>
                   {missCount > 0 && <span style={{fontSize:10,color:"var(--text2)"}}>Missed <span style={{color:"#ff4444",fontFamily:"'DM Mono',monospace",fontWeight:600}}>{missCount}</span></span>}
                   {gamesBack > 0 && <span style={{fontSize:10,color:"var(--text2)"}}>Behind Leader <span style={{color:"var(--yellow)",fontFamily:"'DM Mono',monospace",fontWeight:600}}>-{gamesBack}</span></span>}
+                </div>
+                <div style={{marginTop:3}}>
                   <span style={{fontSize:10,color:"var(--text2)"}}>Last Genius <span style={{color:geniusDays<=3?"var(--green)":geniusDays<=7?"var(--yellow)":"#ff4444",fontFamily:"'DM Mono',monospace",fontWeight:600}}>{geniusDays===0?"Today":geniusDays===999?"Never":`${geniusDays}d ago`}</span></span>
                 </div>
               </div>
