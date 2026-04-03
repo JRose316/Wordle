@@ -603,7 +603,7 @@ function RecentResults({ entries }) {
 }
 
 function ScoreEntry({ onSave, entries }) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = (() => { const d = new Date(); const y = d.getFullYear(); const m = String(d.getMonth()+1).padStart(2,"0"); const day = String(d.getDate()).padStart(2,"0"); return y+"-"+m+"-"+day; })();
   const [date, setDate] = useState(today);
   const [answer, setAnswer] = useState("");
   const [firstWord, setFirstWord] = useState("");
