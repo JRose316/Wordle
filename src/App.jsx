@@ -142,6 +142,8 @@ const CSS = `
 :root{--bg:#121213;--surface:#1a1a1b;--card:#262626;--card2:#1e1e1f;--border:#3a3a3c;--text:#d7dadc;--text2:#818384;--green:#6aaa64;--yellow:#b59f3b;--gray:#3a3a3c;--dgray:#787c7e;--gold:#FFD700;--white:#fff;}
 body{background:var(--bg);color:var(--text);font-family:'Libre Franklin',sans-serif;}
 ::-webkit-scrollbar{width:4px;}::-webkit-scrollbar-track{background:var(--bg);}::-webkit-scrollbar-thumb{background:var(--green);border-radius:2px;}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.refreshing{animation:spin .8s linear infinite;}
 input,select,textarea{font-family:'Libre Franklin',sans-serif;}
 `;
 
@@ -860,6 +862,23 @@ export default function App() {
     });
   }, []);
 
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshData = async () => {
+    setRefreshing(true);
+    const sheetData = await fetchSheetData();
+    if (sheetData) {
+      setAllData(prev => {
+        const merged = { ...prev };
+        ["Q1","Q2","Q3","Q4"].forEach(q => {
+          if (sheetData[q] && sheetData[q].length > 0) merged[q] = sheetData[q];
+        });
+        if (merged.Q1.length === 0) merged.Q1 = Q1_DATA;
+        return merged;
+      });
+    }
+    setRefreshing(false);
+  };
+
   const entries = allData[quarter] || [];
   const computed = computeStats(entries, quarter);
 
@@ -872,17 +891,22 @@ export default function App() {
   return (
     <div style={s.app}>
       <style>{CSS}</style>
-      <div style={s.header}>
-        <div style={s.title}>
-          <span style={s.titleTile("var(--green)")}>W</span>
-          <span style={s.titleTile()}>H</span>
-          <span style={s.titleTile()}>O</span>
-          <span style={s.titleTile()}>R</span>
-          <span style={s.titleTile()}>D</span>
-          <span style={s.titleTile()}>L</span>
-          <span style={s.titleTile()}>E</span>
+      <div style={{...s.header,display:"flex",alignItems:"center",justifyContent:"center",position:"relative"}}>
+        <div style={{textAlign:"center"}}>
+          <div style={s.title}>
+            <span style={s.titleTile("var(--green)")}>W</span>
+            <span style={s.titleTile()}>H</span>
+            <span style={s.titleTile()}>O</span>
+            <span style={s.titleTile()}>R</span>
+            <span style={s.titleTile()}>D</span>
+            <span style={s.titleTile()}>L</span>
+            <span style={s.titleTile()}>E</span>
+          </div>
+          {isAdmin && <div style={{fontSize:9,color:"var(--green)",marginTop:4,letterSpacing:2,textTransform:"uppercase",border:"1px solid var(--green)",borderRadius:4,display:"inline-block",padding:"1px 8px"}}>ADMIN</div>}
         </div>
-        {isAdmin && <div style={{fontSize:9,color:"var(--green)",marginTop:4,letterSpacing:2,textTransform:"uppercase",border:"1px solid var(--green)",borderRadius:4,display:"inline-block",padding:"1px 8px"}}>ADMIN</div>}
+        <button onClick={refreshData} disabled={refreshing} style={{position:"absolute",right:16,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",padding:6,fontSize:18,color:refreshing?"var(--text2)":"var(--green)",transition:"transform .3s"}} title="Refresh scores">
+          <span className={refreshing?"refreshing":""} style={{display:"inline-block"}}>↻</span>
+        </button>
       </div>
       {!loaded ? (
         <div style={{textAlign:"center",padding:60}}>
